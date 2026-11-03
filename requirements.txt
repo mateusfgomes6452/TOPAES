@@ -1,0 +1,6 @@
+PyMySQL==1.2.3
+SQLAlchemy==2.1.6
+pillow==13.0.0
+python-dotenv==1.2.4
+python-telegram-bot==22.8
+qrcode==8.2
