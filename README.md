@@ -2,7 +2,7 @@
 
 Fila virtual de check-in em aeroportos, com bot do Telegram como canal do passageiro.
 
-Implementado até agora: **[RF02] Entrar na Fila Virtual via QR Code**.
+Implementado até agora: **[RF02] Entrar na Fila Virtual via QR Code**. Com consulta de posição (`/posicao`) e saída da fila (`/sair`).
 
 ## Fluxo
 

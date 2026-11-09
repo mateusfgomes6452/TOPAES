@@ -31,6 +31,22 @@ MENSAGENS = {
             "⏱️ Tempo estimado: {tempo} min\n\n"
             "✈️ Voo: {voo} ({companhia})"
         ),
+        "posicao_atualizada": (
+            "📍 Posição atual: {posicao}\n"
+            "⏱️ Tempo estimado: {tempo} min\n\n"
+            "✈️ Voo: {voo} ({companhia})\n"
+            "🛫 Aeroporto: {aeroporto}\n"
+            "🚪 Portão: {portao}\n\n"
+            "Avisaremos aqui quando chegar a sua vez."
+        ),
+        "sem_entrada": (
+            "📭 Você não está na fila no momento.\n\n"
+            "Para entrar, escaneie o QR Code disponível no saguão do aeroporto."
+        ),
+        "sair_da_fila": (
+            "✅ Você saiu da fila.\n\n"
+            "Se precisar entrar novamente, escaneie o QR Code do saguão."
+        ),
         "indisponivel": "⚠️ O sistema está temporariamente indisponível. Tente novamente em instantes.",
     }
 }

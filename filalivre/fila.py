@@ -123,7 +123,26 @@ class FilaService:
             )
         )
         fila.ultima_atualizacao = agora
+        self._recalcular_posicoes(sessao, fila.id)
         return Registrada(_dados(posicao, tempo_estimado, voo))
+
+    def sair(self, chat_id: int) -> bool:
+        """Retira a entrada ativa do passageiro da fila (status DESISTIU) e recalcula as posições."""
+        with self._fabrica_sessoes.begin() as sessao:
+            entrada = (
+                sessao.execute(
+                    select(EntradaFila).where(
+                        EntradaFila.chat_id == chat_id,
+                        EntradaFila.status.in_([StatusFila.AGUARDANDO, StatusFila.CHAMADO]),
+                    )
+                )
+                .scalar_one_or_none()
+            )
+            if entrada is None:
+                return False
+            entrada.status = StatusFila.DESISTIU
+            self._recalcular_posicoes(sessao, entrada.fila_id)
+            return True
 
     def _bloquear_passageiro(self, sessao: Session, chat_id: int, nome: str | None) -> None:
         """Garante que o passageiro existe e bloqueia seu registro, evitando entrada duplicada em mensagens simultâneas."""
@@ -163,6 +182,19 @@ class FilaService:
                 sessao.add(registro)
         except IntegrityError:
             pass
+
+    def _recalcular_posicoes(self, sessao: Session, fila_id: str) -> None:
+        """Reescreve a posição de todos os passageiros ativos da fila, na ordem de entrada."""
+        entradas = sessao.scalars(
+            select(EntradaFila)
+            .where(
+                EntradaFila.fila_id == fila_id,
+                EntradaFila.status.in_([StatusFila.AGUARDANDO, StatusFila.CHAMADO]),
+            )
+            .order_by(EntradaFila.horario_entrada)
+        ).all()
+        for posicao, entrada in enumerate(entradas, start=1):
+            entrada.posicao = posicao
 
     @staticmethod
     def _entrada_ativa(sessao: Session, chat_id: int) -> DadosEntrada | None:

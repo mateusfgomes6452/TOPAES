@@ -114,6 +114,60 @@ def test_estimativa_arredonda_para_cima_e_suporta_zero_balcoes():
     assert estimar_espera(2, 5, 0) == 10
 
 
+def test_get_posicao_retorna_a_posicao_atual_da_fila(conversa):
+    assert conversa.responder(CHAT, "Ana", QR) == texto("boas_vindas", local="Saguão de check-in do Aeroporto do Recife")
+    assert conversa.responder(CHAT, "Ana", "AD4050") == texto("pedir_companhia", voo="AD4050")
+    assert conversa.responder(CHAT, "Ana", "Azul") == confirmacao(posicao=1, tempo=3)
+
+    assert conversa.responder(CHAT, "Ana", "/posicao") == texto(
+        "posicao_atualizada",
+        posicao=1,
+        tempo=3,
+        voo="AD4050",
+        companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+
+def test_get_posicao_do_segundo_passageiro_retorna_posicao_dois(conversa):
+    entrar_na_fila(conversa, chat=1)
+    entrar_na_fila(conversa, chat=2)
+    assert conversa.responder(2, "Bia", "/posicao") == texto(
+        "posicao_atualizada",
+        posicao=2,
+        tempo=5,
+        voo="AD4050",
+        companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+
+def test_get_posicao_sem_entrada_retorna_mensagem_sem_entrada(conversa):
+    assert conversa.responder(CHAT, "Ana", "/posicao") == texto("sem_entrada")
+
+
+def test_sair_da_fila_remove_entrada_e_recalcula_posicoes(conversa, fabrica_sessoes):
+    entrar_na_fila(conversa, chat=1)
+    entrar_na_fila(conversa, chat=2)
+    assert conversa.responder(2, "Bia", "/sair") == texto("sair_da_fila")
+
+    assert conversa.responder(1, "Ana", "/posicao") == texto(
+        "posicao_atualizada",
+        posicao=1,
+        tempo=3,
+        voo="AD4050",
+        companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+
+def test_sair_sem_entrada_retorna_mensagem_sem_entrada(conversa):
+    assert conversa.responder(CHAT, "Ana", "/sair") == texto("sem_entrada")
+
+
 def _update(texto_mensagem):
     return SimpleNamespace(
         effective_message=SimpleNamespace(text=texto_mensagem, reply_text=AsyncMock()),

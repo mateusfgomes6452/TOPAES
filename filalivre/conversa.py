@@ -12,6 +12,8 @@ from filalivre.mensagens import texto as msg
 from filalivre.modelos import Etapa, PontoQr, SessaoBot
 
 COMANDO_START = "/start"
+COMANDO_POSICAO = "/posicao"
+COMANDO_SAIR = "/sair"
 NUMERO_VOO = re.compile(r"[A-Z0-9]{2,8}")
 TAMANHO_MAXIMO_COMPANHIA = 64
 
@@ -32,6 +34,10 @@ class ConversaEntradaFila:
         comando, _, argumento = mensagem.partition(" ")
         if comando == COMANDO_START:
             return self._iniciar(chat_id, argumento.strip())
+        if comando == COMANDO_POSICAO:
+            return self._posicao(chat_id)
+        if comando == COMANDO_SAIR:
+            return self._sair(chat_id)
 
         sessao = self._buscar_sessao(chat_id)
         if sessao is None or not sessao.is_valida(self._relogio()):
@@ -53,6 +59,27 @@ class ConversaEntradaFila:
 
         self._salvar_sessao(chat_id, Etapa.AGUARDANDO_VOO, ponto.codigo, None)
         return msg("boas_vindas", local=ponto.descricao)
+
+    def _posicao(self, chat_id: int) -> str:
+        """Retorna a posição atual do passageiro na fila, se ele estiver nela."""
+        entrada = self._fila_service.buscar_entrada_ativa(chat_id)
+        if entrada is None:
+            return msg("sem_entrada")
+        return msg(
+            "posicao_atualizada",
+            posicao=entrada.posicao,
+            tempo=entrada.tempo_estimado,
+            voo=entrada.numero_voo,
+            companhia=entrada.companhia,
+            aeroporto=entrada.aeroporto,
+            portao=entrada.portao,
+        )
+
+    def _sair(self, chat_id: int) -> str:
+        """Retira o passageiro da fila, se ele estiver nela, e recalcula as posições dos demais."""
+        if self._fila_service.sair(chat_id):
+            return msg("sair_da_fila")
+        return msg("sem_entrada")
 
     def _responder_sem_sessao(self, chat_id: int) -> str:
         entrada = self._fila_service.buscar_entrada_ativa(chat_id)
