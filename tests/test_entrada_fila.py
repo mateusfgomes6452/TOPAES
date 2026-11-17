@@ -206,3 +206,47 @@ def test_mensagens_simultaneas_do_mesmo_passageiro_geram_uma_entrada(fila_servic
         resultados = list(executor.map(lambda _: fila_service.entrar(CHAT, "Ana", "REC", "AD4050", "Azul"), range(10)))
     assert sum(isinstance(r, Registrada) for r in resultados) == 1
     assert contar_entradas(fabrica_sessoes) == 1
+
+
+def test_tempo_estimado_recalcula_dinamicamente_quando_passageiro_a_frente_desiste(conversa):
+    assert entrar_na_fila(conversa, chat=1) == confirmacao(posicao=1, tempo=3)
+    assert entrar_na_fila(conversa, chat=2) == confirmacao(posicao=2, tempo=5)
+
+    assert conversa.responder(1, "Ana", "/sair") == texto("sair_da_fila")
+
+    assert conversa.responder(2, "Bia", "/posicao") == texto(
+        "posicao_atualizada",
+        posicao=1,
+        tempo=3,
+        voo="AD4050",
+        companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+
+def test_abertura_de_novo_balcao_atualiza_tempo_estimado_dinamicamente(conversa, fabrica_sessoes):
+    entrar_na_fila(conversa, chat=1)
+    entrar_na_fila(conversa, chat=2)
+    assert conversa.responder(2, "Bia", "/posicao") == texto(
+        "posicao_atualizada",
+        posicao=2,
+        tempo=5,
+        voo="AD4050",
+        companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+    from filalivre.modelos import Balcao
+
+    with fabrica_sessoes.begin() as sessao:
+        balcao3 = sessao.get(Balcao, 3)
+        balcao3.aberto = True
+
+    assert conversa.responder(2, "Bia", "/posicao") == texto(
+        "posicao_atualizada",
+        posicao=2,
+        tempo=4,
+        voo="AD4050",
+        companhia="Azul",

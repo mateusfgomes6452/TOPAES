@@ -108,8 +108,8 @@ class FilaService:
             .select_from(Balcao)
             .where(Balcao.aberto.is_(True), Balcao.companhia == voo.companhia, Balcao.aeroporto == voo.aeroporto)
         )
-        posicao = aguardando + 1
-        tempo_estimado = estimar_espera(posicao, fila.tempo_medio_atend, balcoes)
+        posicao = (aguardando or 0) + 1
+        tempo_estimado = estimar_espera(posicao, fila.tempo_medio_atend, balcoes or 1)
 
         sessao.add(
             EntradaFila(
@@ -123,7 +123,6 @@ class FilaService:
             )
         )
         fila.ultima_atualizacao = agora
-        self._recalcular_posicoes(sessao, fila.id)
         return Registrada(_dados(posicao, tempo_estimado, voo))
 
     def sair(self, chat_id: int) -> bool:
@@ -131,25 +130,37 @@ class FilaService:
         with self._fabrica_sessoes.begin() as sessao:
             entrada = (
                 sessao.execute(
-                    select(EntradaFila).where(
+                    select(EntradaFila)
+                    .where(
                         EntradaFila.chat_id == chat_id,
                         EntradaFila.status.in_([StatusFila.AGUARDANDO, StatusFila.CHAMADO]),
                     )
+                    .with_for_update()
                 )
                 .scalar_one_or_none()
             )
             if entrada is None:
                 return False
+
+            # Bloqueia a fila virtual para evitar concorrência com novas entradas simultâneas
+            sessao.scalar(
+                select(FilaVirtual).where(FilaVirtual.id == entrada.fila_id).with_for_update()
+            )
+            status_anterior = entrada.status
             entrada.status = StatusFila.DESISTIU
-            self._recalcular_posicoes(sessao, entrada.fila_id)
+            if status_anterior == StatusFila.AGUARDANDO:
+                self._recalcular_posicoes(sessao, entrada.fila_id)
             return True
 
     def _bloquear_passageiro(self, sessao: Session, chat_id: int, nome: str | None) -> None:
         """Garante que o passageiro existe e bloqueia seu registro, evitando entrada duplicada em mensagens simultâneas."""
         consulta = select(Passageiro).where(Passageiro.chat_id == chat_id).with_for_update()
-        if sessao.scalar(consulta) is None:
+        passageiro = sessao.scalar(consulta)
+        if passageiro is None:
             self._inserir_se_ausente(sessao, Passageiro(chat_id=chat_id, nome=nome))
             sessao.scalar(consulta.execution_options(populate_existing=True))
+        elif nome and passageiro.nome != nome:
+            passageiro.nome = nome
 
     def _bloquear_fila(self, sessao: Session, voo: Voo, agora: datetime) -> FilaVirtual:
         """Obtém ou cria a fila do voo e a bloqueia, para que duas entradas não recebam a mesma posição."""
@@ -184,30 +195,68 @@ class FilaService:
             pass
 
     def _recalcular_posicoes(self, sessao: Session, fila_id: str) -> None:
-        """Reescreve a posição de todos os passageiros ativos da fila, na ordem de entrada."""
+        """Reescreve a posição e o tempo estimado de todos os passageiros aguardando na fila."""
+        fila = sessao.get(FilaVirtual, fila_id)
+        if fila is None:
+            return
+
+        voo = sessao.scalar(
+            select(Voo).where(Voo.numero == fila.numero_voo, Voo.companhia == fila.companhia)
+        )
+        balcoes = (
+            sessao.scalar(
+                select(func.count())
+                .select_from(Balcao)
+                .where(
+                    Balcao.aberto.is_(True),
+                    Balcao.companhia == fila.companhia,
+                    Balcao.aeroporto == voo.aeroporto,
+                )
+            )
+            if voo
+            else 1
+        ) or 1
+
         entradas = sessao.scalars(
             select(EntradaFila)
             .where(
                 EntradaFila.fila_id == fila_id,
-                EntradaFila.status.in_([StatusFila.AGUARDANDO, StatusFila.CHAMADO]),
+                EntradaFila.status == StatusFila.AGUARDANDO,
             )
             .order_by(EntradaFila.horario_entrada)
         ).all()
         for posicao, entrada in enumerate(entradas, start=1):
             entrada.posicao = posicao
+            entrada.tempo_estimado = estimar_espera(posicao, fila.tempo_medio_atend, balcoes)
 
     @staticmethod
     def _entrada_ativa(sessao: Session, chat_id: int) -> DadosEntrada | None:
         linha = sessao.execute(
-            select(EntradaFila, Voo)
+            select(EntradaFila, Voo, FilaVirtual.tempo_medio_atend)
             .join(FilaVirtual, FilaVirtual.id == EntradaFila.fila_id)
             .join(Voo, and_(Voo.numero == FilaVirtual.numero_voo, Voo.companhia == FilaVirtual.companhia))
             .where(EntradaFila.chat_id == chat_id, EntradaFila.status.in_([StatusFila.AGUARDANDO, StatusFila.CHAMADO]))
         ).first()
         if linha is None:
             return None
-        entrada, voo = linha
-        return _dados(entrada.posicao, entrada.tempo_estimado, voo)
+        entrada, voo, tempo_medio_atend = linha
+        if entrada.status == StatusFila.CHAMADO:
+            tempo_estimado = 0
+        else:
+            balcoes = (
+                sessao.scalar(
+                    select(func.count())
+                    .select_from(Balcao)
+                    .where(
+                        Balcao.aberto.is_(True),
+                        Balcao.companhia == voo.companhia,
+                        Balcao.aeroporto == voo.aeroporto,
+                    )
+                )
+                or 1
+            )
+            tempo_estimado = estimar_espera(entrada.posicao, tempo_medio_atend, balcoes)
+        return _dados(entrada.posicao, tempo_estimado, voo)
 
 
 def _dados(posicao: int, tempo_estimado: int, voo: Voo) -> DadosEntrada:
