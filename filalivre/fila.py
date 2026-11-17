@@ -223,7 +223,8 @@ class FilaService:
                 EntradaFila.fila_id == fila_id,
                 EntradaFila.status == StatusFila.AGUARDANDO,
             )
-            .order_by(EntradaFila.horario_entrada)
+            # Ordena pela posição: o horário só tem precisão de segundos, e empates voltariam em ordem arbitrária.
+            .order_by(EntradaFila.posicao)
         ).all()
         for posicao, entrada in enumerate(entradas, start=1):
             entrada.posicao = posicao

@@ -10,7 +10,7 @@ from sqlalchemy.exc import OperationalError
 
 from filalivre.bot import criar_tratador
 from filalivre.conversa import ConversaEntradaFila
-from filalivre.fila import Registrada, estimar_espera
+from filalivre.fila import FilaService, Registrada, estimar_espera
 from filalivre.mensagens import texto
 from filalivre.modelos import EntradaFila
 from tests.conftest import URL_MYSQL
@@ -223,6 +223,19 @@ def test_tempo_estimado_recalcula_dinamicamente_quando_passageiro_a_frente_desis
         aeroporto="REC",
         portao="12",
     )
+
+
+def test_desistencia_preserva_a_ordem_de_quem_entrou_no_mesmo_segundo(fabrica_sessoes):
+    # No MySQL, empates no horário de entrada voltam em ordem arbitrária; a ordem precisa vir da posição.
+    agora = datetime(2026, 11, 17, 12)
+    fila_service = FilaService(fabrica_sessoes, tempo_medio_padrao=5, relogio=lambda: agora)
+    chats = range(1, 7)
+    for chat in chats:
+        fila_service.entrar(chat, "Ana", "REC", "AD4050", "Azul")
+
+    fila_service.sair(1)
+
+    assert [fila_service.buscar_entrada_ativa(chat).posicao for chat in chats[1:]] == [1, 2, 3, 4, 5]
 
 
 def test_abertura_de_novo_balcao_atualiza_tempo_estimado_dinamicamente(conversa, fabrica_sessoes):
