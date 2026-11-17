@@ -14,6 +14,12 @@ def test_codigo_fora_do_padrao_do_telegram_e_recusado(codigo):
         montar_link("bot", codigo)
 
 
+@pytest.mark.parametrize("usuario", ["user com espaco", "ab", "a" * 33, "user@invalid", ""])
+def test_usuario_fora_do_padrao_do_telegram_e_recusado(usuario):
+    with pytest.raises(ValueError):
+        montar_link(usuario, "REC-SAGUAO")
+
+
 def test_gera_imagem_criando_a_pasta(tmp_path):
     arquivo = tmp_path / "qrcodes" / "rec.png"
     gerar("https://t.me/bot?start=REC", arquivo)

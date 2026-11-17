@@ -9,11 +9,14 @@ from pathlib import Path
 
 import qrcode
 
-# Limites do Telegram para o parâmetro start.
+# Limites do Telegram para o parâmetro start e nome de usuário.
 CODIGO_VALIDO = re.compile(r"[A-Za-z0-9_-]{1,64}")
+USUARIO_VALIDO = re.compile(r"[A-Za-z0-9_]{3,32}")
 
 
 def montar_link(usuario_bot: str, codigo: str) -> str:
+    if not USUARIO_VALIDO.fullmatch(usuario_bot):
+        raise ValueError("Usuário do bot inválido: use de 3 a 32 letras, números ou _")
     if not CODIGO_VALIDO.fullmatch(codigo):
         raise ValueError("Código inválido: use até 64 letras, números, _ ou -")
     return f"https://t.me/{usuario_bot}?start={codigo}"
