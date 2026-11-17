@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime
 
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from filalivre.banco import agora_utc
 from filalivre.fila import DadosEntrada, FilaService, JaNaFila, Registrada, VooEncerrado, VooNaoEncontrado
@@ -14,6 +14,7 @@ from filalivre.modelos import Etapa, PontoQr, SessaoBot
 COMANDO_START = "/start"
 COMANDO_POSICAO = "/posicao"
 COMANDO_SAIR = "/sair"
+COMANDO_AJUDA = "/ajuda"
 NUMERO_VOO = re.compile(r"[A-Z0-9]{2,8}")
 TAMANHO_MAXIMO_COMPANHIA = 64
 
@@ -22,7 +23,7 @@ class ConversaEntradaFila:
     def __init__(
         self,
         fila_service: FilaService,
-        fabrica_sessoes: sessionmaker,
+        fabrica_sessoes: sessionmaker[Session],
         relogio: Callable[[], datetime] = agora_utc,
     ) -> None:
         self._fila_service = fila_service
@@ -32,12 +33,15 @@ class ConversaEntradaFila:
     def responder(self, chat_id: int, nome: str | None, texto: str) -> str:
         mensagem = texto.strip()
         comando, _, argumento = mensagem.partition(" ")
-        if comando == COMANDO_START:
+        comando_normalizado = comando.split("@")[0].lower()
+        if comando_normalizado == COMANDO_START:
             return self._iniciar(chat_id, argumento.strip())
-        if comando == COMANDO_POSICAO:
+        if comando_normalizado == COMANDO_POSICAO:
             return self._posicao(chat_id)
-        if comando == COMANDO_SAIR:
+        if comando_normalizado == COMANDO_SAIR:
             return self._sair(chat_id)
+        if comando_normalizado in (COMANDO_AJUDA, "/help"):
+            return self._ajuda()
 
         sessao = self._buscar_sessao(chat_id)
         if sessao is None or not sessao.is_valida(self._relogio()):
@@ -45,6 +49,10 @@ class ConversaEntradaFila:
         if sessao.etapa == Etapa.AGUARDANDO_VOO:
             return self._receber_voo(sessao, mensagem)
         return self._receber_companhia(sessao, nome, mensagem)
+
+    def _ajuda(self) -> str:
+        """Exibe os comandos disponíveis no bot."""
+        return msg("ajuda")
 
     def _iniciar(self, chat_id: int, codigo_qr: str) -> str:
         entrada = self._fila_service.buscar_entrada_ativa(chat_id)
@@ -82,6 +90,7 @@ class ConversaEntradaFila:
         return msg("sem_entrada")
 
     def _responder_sem_sessao(self, chat_id: int) -> str:
+        self._remover_sessao(chat_id)
         entrada = self._fila_service.buscar_entrada_ativa(chat_id)
         return _ja_na_fila(entrada) if entrada is not None else msg("sem_sessao")
 
@@ -93,7 +102,8 @@ class ConversaEntradaFila:
         return msg("pedir_companhia", voo=numero_voo)
 
     def _receber_companhia(self, sessao: SessaoBot, nome: str | None, companhia: str) -> str:
-        if not companhia or len(companhia) > TAMANHO_MAXIMO_COMPANHIA:
+        companhia_limpa = companhia.strip()
+        if not companhia_limpa or len(companhia_limpa) > TAMANHO_MAXIMO_COMPANHIA:
             return msg("companhia_invalida")
 
         ponto = self._buscar_ponto(sessao.codigo_qr)
@@ -101,7 +111,7 @@ class ConversaEntradaFila:
             self._remover_sessao(sessao.chat_id)
             return msg("qr_invalido")
 
-        resultado = self._fila_service.entrar(sessao.chat_id, nome, ponto.aeroporto, sessao.numero_voo, companhia)
+        resultado = self._fila_service.entrar(sessao.chat_id, nome, ponto.aeroporto, sessao.numero_voo, companhia_limpa)
         match resultado:
             case Registrada(dados):
                 self._remover_sessao(sessao.chat_id)

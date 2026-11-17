@@ -255,6 +255,38 @@ def test_abertura_de_novo_balcao_atualiza_tempo_estimado_dinamicamente(conversa,
     )
 
 
+def test_comandos_com_sufixo_de_bot_e_maiusculas(conversa):
+    assert conversa.responder(CHAT, "Ana", "/START@fila_livre_bot REC-SAGUAO") == texto(
+        "boas_vindas", local="Saguão de check-in do Aeroporto do Recife"
+    )
+    conversa.responder(CHAT, "Ana", "AD4050")
+    conversa.responder(CHAT, "Ana", "Azul")
+
+    assert conversa.responder(CHAT, "Ana", "/POSICAO@fila_livre_bot") == texto(
+        "posicao_atualizada",
+        posicao=1,
+        tempo=3,
+        voo="AD4050",
+        companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+    assert conversa.responder(CHAT, "Ana", "/SAIR@fila_livre_bot") == texto("sair_da_fila")
+
+
+def test_companhia_com_espacos_laterais_e_aceita(conversa):
+    conversa.responder(CHAT, "Ana", QR)
+    conversa.responder(CHAT, "Ana", "AD4050")
+    assert conversa.responder(CHAT, "Ana", "  Azul  ") == confirmacao(posicao=1, tempo=3)
+
+
+def test_comando_ajuda_retorna_orientacoes(conversa):
+    assert conversa.responder(CHAT, "Ana", "/ajuda") == texto("ajuda")
+    assert conversa.responder(CHAT, "Ana", "/HELP@bot") == texto("ajuda")
+
+
 def test_suporte_multilingue_nas_mensagens():
     assert "Welcome" in texto("boas_vindas", idioma="en", local="Lobby")
     assert "Bienvenido" in texto("boas_vindas", idioma="es", local="Vestíbulo")
+    assert "Bem-vindo" in texto("boas_vindas", idioma="pt-BR", local="Saguão")

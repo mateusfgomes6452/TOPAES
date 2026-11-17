@@ -5,8 +5,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy.exc import SQLAlchemyError
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from filalivre.banco import criar_engine, criar_fabrica_sessoes
@@ -20,12 +19,16 @@ LOG = logging.getLogger(__name__)
 def criar_tratador(conversa: ConversaEntradaFila):
     async def tratar(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
         mensagem = update.effective_message
-        chat_id = update.effective_chat.id
-        nome = update.effective_user.first_name
+        if mensagem is None or mensagem.text is None:
+            return
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if chat_id is None:
+            return
+        nome = update.effective_user.first_name if update.effective_user else None
         try:
             # O acesso ao banco é síncrono; em outra thread, não trava o recebimento de mensagens.
             resposta = await asyncio.to_thread(conversa.responder, chat_id, nome, mensagem.text)
-        except SQLAlchemyError:
+        except Exception:
             LOG.exception("Falha ao processar mensagem do chat %s", chat_id)
             resposta = texto("indisponivel")
         await mensagem.reply_text(resposta)
@@ -33,8 +36,20 @@ def criar_tratador(conversa: ConversaEntradaFila):
     return tratar
 
 
+async def configurar_comandos(aplicacao: Application) -> None:
+    comandos = [
+        BotCommand("posicao", "Consultar posição na fila virtual"),
+        BotCommand("sair", "Sair da fila virtual de check-in"),
+        BotCommand("ajuda", "Exibir instruções de ajuda"),
+    ]
+    try:
+        await aplicacao.bot.set_my_commands(comandos)
+    except Exception:
+        LOG.warning("Não foi possível registrar comandos automáticos no Telegram.")
+
+
 def criar_aplicacao(token: str, conversa: ConversaEntradaFila) -> Application:
-    aplicacao = Application.builder().token(token).build()
+    aplicacao = Application.builder().token(token).post_init(configurar_comandos).build()
     aplicacao.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, criar_tratador(conversa)))
     return aplicacao
 
