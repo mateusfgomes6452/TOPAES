@@ -58,6 +58,7 @@ class Voo(Base):
 
 class Balcao(Base):
     __tablename__ = "balcao"
+    __table_args__ = (Index("idx_balcao_aberto_comp_aero", "companhia", "aeroporto", "aberto"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     numero: Mapped[int] = mapped_column(Integer)
@@ -86,6 +87,8 @@ class EntradaFila(Base):
     __table_args__ = (
         Index("idx_entrada_chat_status", "chat_id", "status"),
         Index("idx_entrada_fila_status", "fila_id", "status"),
+        Index("idx_entrada_fila_status_hora", "fila_id", "status", "horario_entrada"),
+        Index("idx_entrada_fila_status_pos", "fila_id", "status", "posicao"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
