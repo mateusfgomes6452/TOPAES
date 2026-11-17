@@ -250,3 +250,11 @@ def test_abertura_de_novo_balcao_atualiza_tempo_estimado_dinamicamente(conversa,
         tempo=4,
         voo="AD4050",
         companhia="Azul",
+        aeroporto="REC",
+        portao="12",
+    )
+
+
+def test_suporte_multilingue_nas_mensagens():
+    assert "Welcome" in texto("boas_vindas", idioma="en", local="Lobby")
+    assert "Bienvenido" in texto("boas_vindas", idioma="es", local="Vestíbulo")
